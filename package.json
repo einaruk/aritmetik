@@ -1,0 +1,17 @@
+{
+  "name": "aritmetik",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "iPhone için uyarlamalı aritmetik seviye testi (PWA)",
+  "scripts": {
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node --test tests/*.test.js",
+    "test:e2e": "playwright test",
+    "serve": "node tools/serve.js",
+    "icons": "node tools/make-icons.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  }
+}
