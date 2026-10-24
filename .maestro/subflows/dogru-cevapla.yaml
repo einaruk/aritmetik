@@ -1,0 +1,29 @@
+# Ekrandaki iki sayılı soruyu okur, cevabı tuş takımıyla yazar ve onaylar.
+# Kalanlı bölme ve kare/küp yok; ilk sorular toplamadır.
+appId: io.github.einaruk.aritmetik
+---
+- copyTextFrom:
+    text: "[0-9.]+ [+−×÷] [0-9.]+"
+- runScript: hesapla.js
+- repeat:
+    while:
+      true: ${output.i < output.digits.length}
+    commands:
+      # Yazılan cevap tek rakamken aynı rakamın tuşu ikinci eşleşmedir.
+      - runFlow:
+          when:
+            true: ${output.typed !== output.digits[output.i]}
+          commands:
+            - tapOn:
+                text: ${output.digits[output.i]}
+      - runFlow:
+          when:
+            true: ${output.typed === output.digits[output.i]}
+          commands:
+            - tapOn:
+                text: ${output.digits[output.i]}
+                index: 1
+      - evalScript: ${output.typed += output.digits[output.i]; output.i++}
+      - assertVisible: ${output.typed}
+- tapOn: "Onayla|✓"
+- assertVisible: "Doğru."
