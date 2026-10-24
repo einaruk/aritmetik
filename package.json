@@ -3,15 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "iPhone için uyarlamalı aritmetik seviye testi (PWA)",
+  "description": "iPhone (PWA) ve Android (APK) için uyarlamalı aritmetik seviye testi",
   "scripts": {
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test tests/*.test.js",
     "test:e2e": "playwright test",
     "serve": "node tools/serve.js",
-    "icons": "node tools/make-icons.js"
+    "icons": "node tools/make-icons.js",
+    "build:www": "node tools/build-www.js",
+    "android:sync": "npm run build:www && cap sync android"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/share": "^8.0.3",
     "@playwright/test": "1.64.1"
   }
 }

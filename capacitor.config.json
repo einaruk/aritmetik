@@ -1,0 +1,8 @@
+{
+  "appId": "io.github.einaruk.aritmetik",
+  "appName": "Aritmetik",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#f6f4ee"
+  }
+}

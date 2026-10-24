@@ -378,7 +378,10 @@ function renderReport(s, fresh) {
     if (b.dataset.act === 'share') {
       const text = reportText(rep, date);
       try {
-        if (navigator.share) await navigator.share({ title: 'Aritmetik sonucu', text });
+        // Android uygulamasının WebView'ında navigator.share yok; Capacitor Share eklentisi var.
+        const nativeShare = window.Capacitor?.Plugins?.Share;
+        if (nativeShare) await nativeShare.share({ title: 'Aritmetik sonucu', text });
+        else if (navigator.share) await navigator.share({ title: 'Aritmetik sonucu', text });
         else {
           await navigator.clipboard.writeText(text);
           $('toast').textContent = 'Kopyalandı.';
@@ -395,6 +398,7 @@ if (session && isFinished(session)) finish();
 else if (session && session.history.length === 0 && session.current) renderQuiz();
 else renderHome();
 
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+// Android uygulamasında dosyalar APK'nın içinde; önbellek eski sürümü tutmasın.
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && !window.Capacitor?.isNativePlatform?.()) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

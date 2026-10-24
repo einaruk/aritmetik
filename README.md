@@ -1,6 +1,6 @@
 # Aritmetik
 
-iPhone için 50 soruluk uyarlamalı aritmetik seviye testi. 1. sınıftan 5. sınıfa kadar
+iPhone ve Android için 50 soruluk uyarlamalı aritmetik seviye testi. 1. sınıftan 5. sınıfa kadar
 toplama, çıkarma, çarpma, bölme (kalanlı dahil), kare ve küp konularını ölçer. Soruları
 uygulama kendisi üretir; internet, hesap ya da yapay zekâ gerekmez. İlk açılıştan sonra
 internetsiz de çalışır.
@@ -13,6 +13,17 @@ internetsiz de çalışır.
 4. Ana ekrandaki **Aritmetik** simgesinden aç. Uygulama tam ekran açılır.
 
 Güncelleme olunca uygulama bir sonraki açılışta kendini yeniler.
+
+## Android'e kurulum
+
+1. Telefonda şu linki aç ve **aritmetik.apk** dosyasını indir:
+   **https://github.com/einaruk/aritmetik/releases/download/android/aritmetik.apk**
+2. İndirme bitince dosyaya dokun.
+3. Telefon "bilinmeyen uygulamalar" iznini sorarsa tarayıcıya (ör. Chrome) izin ver, geri dön, **Yükle**'ye dokun.
+4. Play Protect uyarı verirse **Yine de yükle**'yi seç. Uygulama Play Store'da olmadığı için bu uyarı normal.
+
+Yeni sürüm için aynı linkten indirip yükle; testler ve sonuçlar silinmez.
+Android uygulaması internet istemez; dosyalar APK'nın içinde.
 
 ## Nasıl çalışır
 
@@ -55,3 +66,30 @@ Uçtan uca testler iPhone 12 mini ekranında (Safari içinde 375 × 629, ana ekr
 olarak 375 × 812) WebKit ve Chromium ile koşar. WebKit'in sistem kütüphaneleri olmayan
 makinede yalnız Chromium için: `E2E_BROWSERS=chromium npm run test:e2e`.
 GitHub Actions her push'ta ikisini de koşar.
+
+### Android APK
+
+`android/` bir [Capacitor](https://capacitorjs.com/) projesi. Web dosyalarını
+(`index.html`, `css/`, `js/`, `icons/`) uygulamanın içine koyar. Web dosyasını
+değiştirince Android tarafında ayrıca bir şey yapmak gerekmez.
+
+GitHub Actions (`.github/workflows/android.yml`) main'e her push'ta imzalı APK derler
+ve **android** sürümüne koyar; yukarıdaki indirme linki hep aynı kalır.
+
+İmza anahtarı repoda değil. Aynı anahtarla imzalanmayan APK eski kurulumun üzerine
+kurulamaz; bu yüzden anahtarı kaybetme. Anahtar ve parolası yerelde
+`~/.config/aritmetik-android/` altında, GitHub'da şu iki secret'ta:
+
+```sh
+base64 -w0 ~/.config/aritmetik-android/aritmetik.p12 | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD < ~/.config/aritmetik-android/password.txt
+```
+
+Yerelde derlemek için JDK 21 ve Android SDK gerekir:
+
+```sh
+npm run android:sync                     # www/ klasörünü kurar, android/ içine kopyalar
+cd android && ./gradlew assembleDebug    # app/build/outputs/apk/debug/app-debug.apk
+```
+
+İkonu değiştirince `npm run icons` iOS ve Android ikonlarını yeniden üretir.

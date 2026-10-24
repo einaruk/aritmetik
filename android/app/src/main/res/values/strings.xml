@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Aritmetik</string>
+    <string name="title_activity_main">Aritmetik</string>
+    <string name="package_name">io.github.einaruk.aritmetik</string>
+    <string name="custom_url_scheme">io.github.einaruk.aritmetik</string>
+</resources>
