@@ -25,5 +25,6 @@ appId: io.github.einaruk.aritmetik
                 index: 1
       - evalScript: ${output.typed += output.digits[output.i]; output.i++}
       - assertVisible: ${output.typed}
+# "Doğru." 700 ms görünüp sonraki soruya geçer; Maestro'nun beklemesi bunu kaçırır.
+# Doğru cevabı çağıran akış bir sonraki sorunun açılmasıyla doğrular.
 - tapOn: "Onayla|✓"
-- assertVisible: "Doğru."
