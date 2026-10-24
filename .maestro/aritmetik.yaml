@@ -1,4 +1,4 @@
-# Android uygulamasının duman testi: açılış, doğru ve yanlış cevap,
+# Android uygulamasının duman testi: açılış, soru sayısı, power, doğru ve yanlış cevap,
 # uygulama kapanıp açılınca kaldığı yerden devam. Soru mantığını e2e/ test eder;
 # burada APK'nın içindeki WebView'da uygulamanın çalıştığına bakılır.
 appId: io.github.einaruk.aritmetik
@@ -9,32 +9,37 @@ appId: io.github.einaruk.aritmetik
     visible: "Başla"
     timeout: 30000
 - assertVisible: "Aritmetik"
+- assertVisible: "Power"
+- assertVisible: "0"  # ilk açılışta power
+- assertVisible: "Soru sayısı"
+- tapOn: "10"
 - takeScreenshot: maestro-out/01-ana-sayfa
 
 - tapOn: "Başla"
-- assertVisible: "Soru 1 / 50"
+- assertVisible: "Soru 1 / 10"
 - takeScreenshot: maestro-out/02-soru-1
 
 # Doğru cevap: "Doğru." yazar, kendiliğinden 2. soruya geçer.
 - runFlow: subflows/dogru-cevapla.yaml
 - extendedWaitUntil:
-    visible: "Soru 2 / 50"
+    visible: "Soru 2 / 10"
     timeout: 5000
 
 # Bilmiyorum yanlış sayılır; Devam'a basmadan geçmez.
 - tapOn: "Bilmiyorum"
 - assertVisible: "Yanlış."
+- assertVisible: "−[0-9]+"  # power azalışı
 - takeScreenshot: maestro-out/03-yanlis
-- assertVisible: "Soru 2 / 50"
+- assertVisible: "Soru 2 / 10"
 - tapOn: "Devam"
-- assertVisible: "Soru 3 / 50"
+- assertVisible: "Soru 3 / 10"
 
 # Uygulama kapanıp açılınca test kaldığı yerden sürer.
 - stopApp
 - launchApp
 - extendedWaitUntil:
-    visible: "Devam et (2/50)"
+    visible: "Devam et (2/10)"
     timeout: 30000
 - takeScreenshot: maestro-out/04-devam-et
-- tapOn: "Devam et (2/50)"
-- assertVisible: "Soru 3 / 50"
+- tapOn: "Devam et (2/10)"
+- assertVisible: "Soru 3 / 10"

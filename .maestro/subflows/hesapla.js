@@ -5,6 +5,7 @@ const num = (s) => Number(s.replace(/\./g, ''));
 const a = num(m[1]);
 const b = num(m[3]);
 const value = { '+': a + b, '−': a - b, '×': a * b, '÷': a / b }[m[2]];
+output.question = maestro.copiedText.trim();
 output.digits = String(value);
 output.i = 0;
 output.typed = '';

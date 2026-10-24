@@ -1,7 +1,7 @@
 {
   "name": "Aritmetik",
   "short_name": "Aritmetik",
-  "description": "50 soruluk uyarlamalı aritmetik seviye testi (1–5. sınıf).",
+  "description": "Uyarlamalı aritmetik seviye testi (1–5. sınıf).",
   "lang": "tr",
   "start_url": "./",
   "scope": "./",

@@ -4,6 +4,7 @@ import {
   TOTAL, TOPICS, PLAN, CORE, makeRng, createSession, nextQuestion, submit, isFinished,
   expected, check, classifyError, buildReport, reportText, genitive, fmt, questionText,
   carryCount, borrowCount, digitAbsDiff, borrowNoDecrement, additionNoCarry, startLevel, previousFocus,
+  planFor, difficulty, powerExpect, powerDelta, initialPower, POWER_MAX, MIN_TOTAL, MAX_TOTAL,
 } from '../js/engine.js';
 
 const L = (n) => String(n).length;
@@ -104,8 +105,8 @@ function wrongAnswer(q) {
 // Belirli sınıf düzeyine kadar olan seviyeleri bilen öğrenci.
 const studentOfGrade = (g) => (q) => TOPICS[q.topic].levels[q.level - 1].grade <= g;
 
-function run(seed, knows, previous = null) {
-  const s = createSession(seed, 0, previous);
+function run(seed, knows, previous = null, opts = {}) {
+  const s = createSession(seed, 0, previous, opts);
   const asked = [];
   while (!isFinished(s)) {
     const q = nextQuestion(s);
@@ -372,4 +373,92 @@ test('yalnız bir konuda zayıf, diğerlerinde güçlü öğrenciye kare/küp yi
     assert.ok(s.history.some((h) => h.topic === 'kare'), `seed ${seed}`);
     assert.equal(buildReport(s).overall.grade, 2);
   }
+});
+
+// ---------------------------------------------------------------- soru sayısı
+test('plan her soru sayısına oranlanır, toplamı tutar', () => {
+  assert.deepEqual(planFor(TOTAL), PLAN);
+  for (let n = MIN_TOTAL; n <= MAX_TOTAL; n++) {
+    const plan = planFor(n);
+    assert.equal(plan.reduce((a, b) => a + b.count, 0), n, `${n}`);
+    assert.deepEqual(plan.map((b) => b.topic), PLAN.map((b) => b.topic));
+  }
+});
+
+test('seçilen sayıda soru sorulur, tekrar yok; önceki testten başlarken de', () => {
+  for (const total of [MIN_TOTAL, 10, 23, 77, MAX_TOTAL]) {
+    for (const [name, knows] of Object.entries(STRATEGIES)) {
+      for (let seed = 1; seed <= 15; seed++) {
+        const first = run(seed, knows, null, { total });
+        assert.equal(first.s.history.length, total, `${name} ${total}`);
+        assert.equal(new Set(first.asked.map((q) => q.key)).size, total);
+        const { s, asked } = run(seed + 500, knows, JSON.parse(JSON.stringify(first.s)), { total });
+        assert.equal(s.history.length, total, `${name} ${total} ikinci`);
+        assert.equal(new Set(asked.map((q) => q.key)).size, total);
+      }
+    }
+  }
+});
+
+test('total alanı olmayan eski oturum 50 sorudur', () => {
+  const s = createSession(1, 0);
+  delete s.total;
+  assert.equal(isFinished(s), false);
+  s.history = Array.from({ length: TOTAL }, () => ({}));
+  assert.equal(isFinished(s), true);
+});
+
+// ---------------------------------------------------------------- power
+test('zorluk 0–100 arası, konu içinde seviyeyle artar, sınıf dilimine düşer', () => {
+  for (const [t, { levels }] of Object.entries(TOPICS)) {
+    let prev = -1;
+    levels.forEach((l, i) => {
+      const d = difficulty(t, i + 1);
+      assert.ok(d > prev, `${t} ${i + 1}`);
+      assert.ok(d > 20 * (l.grade - 1) && d < 20 * l.grade, `${t} ${i + 1}: ${d}`);
+      prev = d;
+    });
+  }
+});
+
+test('power değişimi: zor soruyu bilmek çok, kolayı az kazandırır; kolayda yanılmak çok kaybettirir', () => {
+  assert.equal(powerExpect(50, 50), 0.5);
+  assert.equal(powerDelta(50, 50, true), 4);
+  assert.equal(powerDelta(50, 50, false), -4);
+  assert.ok(powerDelta(50, 90, true) > powerDelta(50, 50, true));
+  assert.ok(powerDelta(50, 50, true) > powerDelta(50, 10, true));
+  assert.ok(powerDelta(50, 10, false) < powerDelta(50, 90, false));
+  // en az 1 puan
+  assert.equal(powerDelta(90, 5, true), 1);
+  assert.equal(powerDelta(5, 90, false), -1);
+  // 0–100 dışına çıkmaz
+  assert.equal(powerDelta(POWER_MAX, 95, true), 0);
+  assert.equal(powerDelta(0, 5, false), 0);
+});
+
+test('power testten teste taşınır ve öğrencinin düzeyine oturur', () => {
+  const end = {};
+  for (const g of [2, 3, 4]) {
+    let prev = null;
+    let power = 0;
+    for (let i = 0; i < 3; i++) {
+      const { s } = run(300 + i, STRATEGIES[`sinif${g}`], prev, { power });
+      assert.equal(s.powerStart, power);
+      assert.equal(s.history.at(-1).power, s.power);
+      assert.equal(buildReport(s).power.start, power);
+      power = s.power;
+      prev = s;
+    }
+    end[g] = power;
+    assert.ok(power >= 0 && power <= POWER_MAX);
+  }
+  assert.ok(end[2] < end[3] && end[3] < end[4], JSON.stringify(end));
+  // Rapor metninde power satırı
+  assert.match(reportText(buildReport(run(1, STRATEGIES.sinif3).s), 'tarih'), /Power: 0 → \d+ \(\+\d+\)/);
+});
+
+test('power kaydı yoksa başlangıç önceki testin sınıfından gelir', () => {
+  assert.equal(initialPower([]), 0);
+  const { s } = run(5, STRATEGIES.sinif3);
+  assert.equal(initialPower([s]), 50);
 });

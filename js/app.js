@@ -1,12 +1,14 @@
 // Arayüz: ekranlar, tuş takımı, süre ölçümü, kayıt. Soru mantığı engine.js'te.
 import {
-  TOTAL, STATE_VERSION, createSession, nextQuestion, submit, isFinished,
-  questionText, buildReport, reportText, fmt, fmtDuration, gradeText, previousFocus,
-  answerText, expectedText,
+  TOTAL, MIN_TOTAL, MAX_TOTAL, POWER_MAX, STATE_VERSION, createSession, nextQuestion, submit,
+  isFinished, totalOf, questionText, buildReport, reportText, fmt, fmtDuration, gradeText,
+  previousFocus, answerText, expectedText, initialPower, signed,
 } from './engine.js';
 
 const SESSION_KEY = 'aritmetik.session.v1';
 const RESULTS_KEY = 'aritmetik.results.v1';
+const POWER_KEY = 'aritmetik.power.v1';
+const COUNT_KEY = 'aritmetik.count.v1';
 const MAX_RESULTS = 20;
 const MAX_DIGITS = 7;
 const OK_DELAY_MS = 700;
@@ -37,7 +39,17 @@ function loadSession() {
   return s && s.v === STATE_VERSION && Array.isArray(s.history) ? s : null;
 }
 
-const saveSession = () => store(SESSION_KEY, session);
+// Power her cevaptan sonra ayrıca yazılır; yeni test kaldığı yerden sürdürür.
+function saveSession() {
+  store(SESSION_KEY, session);
+  if (session && session.power != null) store(POWER_KEY, session.power);
+}
+
+function currentPower() {
+  if (session && session.power != null) return session.power;
+  const p = load(POWER_KEY, null);
+  return typeof p === 'number' ? p : initialPower(load(RESULTS_KEY, []));
+}
 
 function newSeed() {
   const a = new Uint32Array(1);
@@ -59,6 +71,8 @@ function clock(ms) {
 
 // ---------------------------------------------------------------- durum
 let session = loadSession();
+// Power'dan önce başlamış yarım test, kayıtlı power ile sürer.
+if (session && session.power == null) session.power = session.powerStart = currentPower();
 let quiz = null; // { inputs: {q, r}, field, locked, shownAt, timer, okTimeout }
 
 function stopQuiz() {
@@ -94,17 +108,47 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', pauseClock);
 
+// ---------------------------------------------------------------- power göstergesi
+function powerBar(p) {
+  // Meter rolü yalnız çubukta: etiket, değer ve değişim ayrı metin olarak okunur.
+  return `<div class="power" data-id="power">
+    <span class="power-label">Power</span>
+    <div class="power-track" data-id="power-meter" role="meter" aria-label="Power"
+      aria-valuemin="0" aria-valuemax="${POWER_MAX}" aria-valuenow="${p}"><div class="power-fill" data-id="power-fill" style="width:${(p / POWER_MAX) * 100}%"></div></div>
+    <span class="power-value" data-id="power-value">${p}</span>
+    <span class="power-delta" data-id="power-delta"></span>
+  </div>`;
+}
+
+function showPower(p, delta) {
+  $('power-meter').setAttribute('aria-valuenow', p);
+  $('power-fill').style.width = `${(p / POWER_MAX) * 100}%`;
+  $('power-value').textContent = p;
+  const d = $('power-delta');
+  d.textContent = signed(delta);
+  d.className = `power-delta show ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}`;
+}
+
 // ---------------------------------------------------------------- ana sayfa
 function renderHome() {
   stopQuiz();
   const results = load(RESULTS_KEY, []);
   const inProgress = session && !isFinished(session) && session.history.length > 0;
   const focus = results.length ? previousFocus(results[0]) : null;
+  const count = load(COUNT_KEY, TOTAL);
+  const countField = `
+    <label class="count-field">
+      <span>Soru sayısı</span>
+      <input type="number" inputmode="numeric" min="${MIN_TOTAL}" max="${MAX_TOTAL}" value="${count}" data-id="count-input" aria-label="Soru sayısı">
+    </label>
+    <div class="chips">${[10, 20, 30, 50].map((n) => `<button class="chip" data-act="count" data-n="${n}">${n}</button>`).join('')}</div>
+    <div class="field-error" data-id="count-error" role="alert"></div>`;
   app.innerHTML = `
     <h1>Aritmetik</h1>
-    <p class="muted">${TOTAL} soruluk seviye testi. Sorular tek tek gelir; doğru cevapta biraz zorlaşır, yanlışta biraz kolaylaşır. Her sorunun süresi ölçülür.</p>
+    ${powerBar(currentPower())}
+    <p class="muted">Seviye testi. Sorular tek tek gelir; doğru cevapta biraz zorlaşır, yanlışta biraz kolaylaşır. Her sorunun süresi ölçülür. Power zor soruyu bildikçe çok, kolayı bildikçe az artar; yanlışta azalır.</p>
     ${inProgress
-      ? `<button class="btn primary" data-act="continue">Devam et (${session.history.length}/${TOTAL})</button>
+      ? `<button class="btn primary" data-act="continue">Devam et (${session.history.length}/${totalOf(session)})</button>
          <button class="btn" data-act="restart">Baştan başla</button>`
       : focus
         ? `<div class="card small" data-id="focus">
@@ -113,9 +157,11 @@ function renderHome() {
                ? `<ul class="clean">${focus.weak.map((w) => `<li>${esc(w.name)}: ${esc(w.label)}</li>`).join('')}</ul>`
                : `<div class="muted">Önceki testte yanlış yoktu; her konu ulaşılan seviyeden başlar.</div>`}
            </div>
+           ${countField}
            <button class="btn primary" data-act="start">Başla</button>
            <button class="btn" data-act="fresh">Sıfırdan başla</button>`
-        : `<button class="btn primary" data-act="start">Başla</button>`}
+        : `${countField}
+           <button class="btn primary" data-act="start">Başla</button>`}
     ${results.length ? `<h2>Önceki sonuçlar</h2>` : ''}
     ${results.map((r, i) => {
       const rep = buildReport(r);
@@ -129,11 +175,17 @@ function renderHome() {
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const act = b.dataset.act;
-    if (act === 'start') startNew(results[0] || null);
+    if (act === 'count') {
+      $('count-input').value = b.dataset.n;
+      $('count-error').textContent = '';
+    } else if (act === 'start') startNew(results[0] || null);
     else if (act === 'fresh') startNew(null);
     else if (act === 'continue') renderQuiz();
     else if (act === 'restart') {
-      if (b.dataset.armed) startNew(results[0] || null);
+      if (b.dataset.armed) {
+        session = null; // yarım testin power'ı kayıtlı; yeni test oradan sürer
+        startNew(results[0] || null);
+      }
       else {
         b.dataset.armed = '1';
         b.textContent = 'Emin misin? Yeniden dokun';
@@ -142,8 +194,25 @@ function renderHome() {
   };
 }
 
+// Ana sayfadaki soru sayısı; geçersizse uyarı yazar ve null döner.
+// "Baştan başla"da alan yok; son seçilen sayı kullanılır.
+function chosenTotal() {
+  const input = $('count-input');
+  if (!input) return load(COUNT_KEY, TOTAL);
+  const n = Number(input.value);
+  if (!Number.isInteger(n) || n < MIN_TOTAL || n > MAX_TOTAL) {
+    $('count-error').textContent = `${MIN_TOTAL} ile ${MAX_TOTAL} arasında bir sayı yaz.`;
+    input.focus();
+    return null;
+  }
+  return n;
+}
+
 function startNew(previous) {
-  session = createSession(newSeed(), Date.now(), previous);
+  const total = chosenTotal();
+  if (total === null) return;
+  store(COUNT_KEY, total);
+  session = createSession(newSeed(), Date.now(), previous, { total, power: currentPower() });
   saveSession();
   renderQuiz();
 }
@@ -158,11 +227,12 @@ function renderQuiz() {
   const twoFields = q.op === '/r';
   app.innerHTML = `
     <section class="quiz">
+      ${powerBar(session.power)}
       <div class="topbar">
-        <span data-id="count">Soru ${q.n} / ${TOTAL}</span>
+        <span data-id="count">Soru ${q.n} / ${totalOf(session)}</span>
         <span data-id="clock" aria-label="Geçen süre">00:00</span>
       </div>
-      <div class="progress"><div style="width:${((q.n - 1) / TOTAL) * 100}%"></div></div>
+      <div class="progress"><div style="width:${((q.n - 1) / totalOf(session)) * 100}%"></div></div>
       <div class="question">
         <div class="main" data-id="question">${esc(t.main)}</div>
         <div class="sub">${esc(t.sub)}</div>
@@ -274,6 +344,7 @@ function answer(skipped = false) {
   const fb = $('feedback');
   fb.textContent = res.message;
   fb.className = `feedback ${res.correct ? 'ok' : 'bad'}`;
+  showPower(res.power, res.powerDelta);
   for (const el of app.querySelectorAll('.key, .skip')) el.disabled = true;
   if (res.correct) {
     quiz.okTimeout = setTimeout(advance, OK_DELAY_MS);
@@ -330,6 +401,11 @@ function renderReport(s, fresh) {
       ${rep.overall.weakest.length ? `<div class="small">En zayıf konu: ${esc(rep.overall.weakest.join(', '))}</div>` : ''}
       <div class="small muted">${rep.correct}/${rep.total} doğru · toplam ${esc(fmtDuration(rep.totalMs))} · soru başına ort. ${esc(fmtDuration(rep.avgMs))}</div>
     </div>
+    ${rep.power ? `
+      <div class="card">
+        ${powerBar(rep.power.end)}
+        <div class="small muted" data-id="power-change">Power ${rep.power.start} → ${rep.power.end} (${esc(signed(rep.power.end - rep.power.start))})</div>
+      </div>` : ''}
 
     <h2>Konu konu</h2>
     ${rep.topics.map((t) => `

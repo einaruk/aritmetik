@@ -1,6 +1,6 @@
 // Uygulama kabuğunu önbelleğe alır; ilk açılıştan sonra internet gerekmez.
 // Dosyalardan biri değişince CACHE adını artır.
-const CACHE = 'aritmetik-v2';
+const CACHE = 'aritmetik-v3';
 const FILES = [
   './',
   'index.html',

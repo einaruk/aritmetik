@@ -251,3 +251,92 @@ test('Sıfırdan başla önceki testi dikkate almaz', async ({ page }) => {
   expect(s.basedOn).toBeNull();
   expect(s.blocks.map((b) => b.count)).toEqual([10, 12, 10, 12, 6]);
 });
+
+// ---------------------------------------------------------------- soru sayısı ve power
+const powerValue = async (page) => Number(await page.locator('[data-id="power-value"]').textContent());
+
+test('soru sayısı seçilir, o kadar soru sorulur ve bir sonraki açılışta hatırlanır', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('[data-id="count-input"]')).toHaveValue('50');
+  await page.locator('.chip', { hasText: '10' }).tap();
+  await page.getByRole('button', { name: 'Başla' }).tap();
+  for (let n = 1; n <= 10; n++) {
+    await expect(page.locator('[data-id="count"]')).toHaveText(`Soru ${n} / 10`);
+    await answerQuestion(page, await readQuestion(page));
+    await expect(page.locator('[data-id="feedback"]')).toHaveText('Doğru.');
+  }
+  await expect(page.getByRole('heading', { name: 'Test bitti' })).toBeVisible();
+  await expect(page.locator('table.log tbody tr')).toHaveCount(10);
+  await page.getByRole('button', { name: 'Ana sayfa' }).tap();
+  await expect(page.locator('[data-id="count-input"]')).toHaveValue('10');
+});
+
+test('geçersiz soru sayısıyla test başlamaz', async ({ page }) => {
+  await page.goto('./');
+  for (const v of ['3', '101', '']) {
+    await page.locator('[data-id="count-input"]').fill(v);
+    await page.getByRole('button', { name: 'Başla' }).tap();
+    await expect(page.locator('[data-id="count-error"]')).toHaveText('5 ile 100 arasında bir sayı yaz.');
+    await expect(page.locator('[data-id="count"]')).toHaveCount(0);
+  }
+  await page.locator('[data-id="count-input"]').fill('7');
+  await page.getByRole('button', { name: 'Başla' }).tap();
+  await expect(page.locator('[data-id="count"]')).toHaveText('Soru 1 / 7');
+});
+
+test('power ekranın tepesinde; doğru cevapta artar, Bilmiyorum ile azalır', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(() => localStorage.setItem('aritmetik.power.v1', '40'));
+  await start(page);
+  const bar = page.locator('[data-id="power"]');
+  await expect(bar).toBeVisible();
+  expect((await bar.boundingBox()).y).toBeLessThan((await page.locator('[data-id="count"]').boundingBox()).y);
+  expect(await powerValue(page)).toBe(40);
+
+  await answerQuestion(page, await readQuestion(page));
+  await expect(page.locator('[data-id="power-delta"]')).toHaveText(/^\+\d+$/);
+  await expect(page.locator('[data-id="count"]')).toHaveText('Soru 2 / 50');
+  const up = await powerValue(page);
+  expect(up).toBeGreaterThan(40);
+
+  await page.getByRole('button', { name: 'Bilmiyorum' }).tap();
+  await expect(page.locator('[data-id="power-delta"]')).toHaveText(/^−\d+$/);
+  expect(await powerValue(page)).toBeLessThan(up);
+  expect(await page.evaluate(() => Number(localStorage.getItem('aritmetik.power.v1')))).toBe(await powerValue(page));
+});
+
+test('power bir önceki testten kalan değerle sürer', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('[data-id="count-input"]').fill('5');
+  await page.getByRole('button', { name: 'Başla' }).tap();
+  for (let n = 1; n <= 5; n++) {
+    await expect(page.locator('[data-id="count"]')).toHaveText(`Soru ${n} / 5`);
+    await answerQuestion(page, await readQuestion(page));
+  }
+  await expect(page.locator('[data-id="power-change"]')).toHaveText(/^Power 0 → \d+ \(\+\d+\)$/);
+  const end = await powerValue(page);
+  expect(end).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Ana sayfa' }).tap();
+  expect(await powerValue(page)).toBe(end);
+  await page.reload();
+  await page.getByRole('button', { name: 'Başla', exact: true }).tap();
+  expect(await powerValue(page)).toBe(end);
+});
+
+test('power olmadan başlamış yarım test, kayıtlı power ile sürer', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(async () => {
+    const e = await import('./js/engine.js');
+    const s = e.createSession(1);
+    delete s.total;
+    delete s.power;
+    delete s.powerStart;
+    e.nextQuestion(s);
+    localStorage.setItem('aritmetik.session.v1', JSON.stringify(s));
+    localStorage.setItem('aritmetik.power.v1', '33');
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Devam et (0/50)' })).toHaveCount(0); // history boş: doğrudan soru
+  await expect(page.locator('[data-id="count"]')).toHaveText('Soru 1 / 50');
+  expect(await powerValue(page)).toBe(33);
+});

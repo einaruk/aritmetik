@@ -1,6 +1,6 @@
 # Aritmetik
 
-iPhone ve Android için 50 soruluk uyarlamalı aritmetik seviye testi. 1. sınıftan 5. sınıfa kadar
+iPhone ve Android için uyarlamalı aritmetik seviye testi. 1. sınıftan 5. sınıfa kadar
 toplama, çıkarma, çarpma, bölme (kalanlı dahil), kare ve küp konularını ölçer. Soruları
 uygulama kendisi üretir; internet, hesap ya da yapay zekâ gerekmez. İlk açılıştan sonra
 internetsiz de çalışır.
@@ -31,13 +31,20 @@ Android uygulaması internet istemez; dosyalar APK'nın içinde.
 - Doğru cevapta "Doğru." yazar ve soru biraz zorlaşır. Yanlış cevapta
   "Yanlış. Doğru cevaba X uzaktasın." yazar, doğru cevabı söylemez; aynı konuda biraz
   daha kolay bir soru gelir. Aynı soru iki kez sorulmaz.
-- Konular sırayla gelir: toplama (10 soru), çıkarma (12), çarpma (10), bölme (12),
-  kare ve küp (6). Kare ve küp 5. sınıf konusudur; hiçbir konuda 4. sınıf düzeyine
-  ulaşmamış öğrencide bu 6 soru en zayıf konuya gider.
+- Soru sayısı ana sayfada seçilir (5–100, varsayılan 50); son seçilen sayı hatırlanır.
+- Konular sırayla gelir. 50 soruda: toplama (10 soru), çıkarma (12), çarpma (10),
+  bölme (12), kare ve küp (6); başka soru sayısında bu oranlarla bölünür. Kare ve küp
+  5. sınıf konusudur; hiçbir konuda 4. sınıf düzeyine ulaşmamış öğrencide bu sorular
+  en zayıf konuya gider.
 - Yeni test bir önceki testin yanlışlarından başlar: her konu takıldığı seviyenin bir
   altından başlar ve o seviyeyi atlamadan ilerler; yanlışı olmayan konulardan 2'şer soru
   yanlışı çok olan konulara aktarılır. Ana sayfada nelerin tekrar edileceği yazar.
   **Sıfırdan başla** önceki testi dikkate almaz.
+- Ekranın tepesindeki **Power** göstergesi 0–100 arası bir beceri puanıdır ve testten
+  teste taşınır. Zor soruyu bilmek çok, kolayı bilmek az puan kazandırır; kolay soruda
+  yanılmak çok, zorda yanılmak az kaybettirir. Puan, öğrencinin yarı yarıya bildiği
+  soru zorluğuna oturur: 20'ler 1–2. sınıf, 50 civarı 3. sınıf, 70'ler 4. sınıf, 90'lar
+  5. sınıf düzeyi. Hesap için bkz. `js/engine.js`, `powerDelta`.
 - Her sorunun süresi ölçülür. Uygulama arka plandayken geçen süre sayılmaz.
 - Test yarıda kapanırsa kaldığı yerden sürer.
 - Sonda genel seviye (ör. "3. sınıf seviyesi"), konu konu seviye ve eksikler, yanlış

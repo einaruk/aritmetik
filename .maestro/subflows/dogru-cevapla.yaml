@@ -9,6 +9,7 @@ appId: io.github.einaruk.aritmetik
     while:
       true: ${output.i < output.digits.length}
     commands:
+      # Tepedeki power değeri de bir sayıdır; tuşlar sorunun altından seçilir.
       # Yazılan cevap tek rakamken aynı rakamın tuşu ikinci eşleşmedir.
       - runFlow:
           when:
@@ -16,12 +17,14 @@ appId: io.github.einaruk.aritmetik
           commands:
             - tapOn:
                 text: ${output.digits[output.i]}
+                below: ${output.question}
       - runFlow:
           when:
             true: ${output.typed === output.digits[output.i]}
           commands:
             - tapOn:
                 text: ${output.digits[output.i]}
+                below: ${output.question}
                 index: 1
       - evalScript: ${output.typed += output.digits[output.i]; output.i++}
       - assertVisible: ${output.typed}

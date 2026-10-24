@@ -2,7 +2,9 @@
 // DOM'a ve tarayıcıya dokunmaz; Node testleri doğrudan bu dosyayı içe aktarır.
 // Oturum durumu düz JSON'dur: localStorage'a yazılıp geri okunabilir.
 
-export const TOTAL = 50;
+export const TOTAL = 50; // varsayılan soru sayısı
+export const MIN_TOTAL = 5;
+export const MAX_TOTAL = 100;
 export const STATE_VERSION = 1;
 
 // ---------------------------------------------------------------- RNG
@@ -200,6 +202,15 @@ export const PLAN = [
   { topic: 'kare', count: 6 },
 ];
 
+// PLAN'ı başka bir soru sayısına oranlar; küsuratı en büyük olan bloklar yukarı yuvarlanır.
+export function planFor(total) {
+  const base = PLAN.reduce((a, b) => a + b.count, 0);
+  const plan = PLAN.map((b) => ({ topic: b.topic, count: Math.floor((b.count * total) / base), rest: (b.count * total) % base }));
+  const left = total - plan.reduce((a, b) => a + b.count, 0);
+  [...plan].sort((x, y) => y.rest - x.rest).slice(0, left).forEach((b) => b.count++);
+  return plan.map(({ topic, count }) => ({ topic, count }));
+}
+
 // ---------------------------------------------------------------- soru
 export function expected(q) {
   switch (q.op) {
@@ -250,8 +261,9 @@ export function questionText(q) {
 
 // ---------------------------------------------------------------- oturum
 // previous: biten bir önceki oturum. Verilirse yeni oturum onun yanlışlarından başlar.
-export function createSession(seed, now = Date.now(), previous = null) {
-  const focus = previous ? previousFocus(previous) : null;
+// total: soru sayısı. power: önceki oturumdan kalan power.
+export function createSession(seed, now = Date.now(), previous = null, { total = TOTAL, power = 0 } = {}) {
+  const focus = previous ? previousFocus(previous, total) : null;
   return {
     v: STATE_VERSION,
     seed: seed >>> 0,
@@ -259,7 +271,10 @@ export function createSession(seed, now = Date.now(), previous = null) {
     startedAt: now,
     finishedAt: null,
     basedOn: previous ? previous.startedAt : null,
-    blocks: (focus ? focus.plan : PLAN).map((b) => ({ topic: b.topic, count: b.count, resolved: null })),
+    total,
+    power,
+    powerStart: power,
+    blocks: (focus ? focus.plan : planFor(total)).map((b) => ({ topic: b.topic, count: b.count, resolved: null })),
     blockIndex: 0,
     inBlock: 0,
     topics: focus ? focus.topics : {},
@@ -277,7 +292,7 @@ const SHIFT = 2;
 //   seviye ilerler; takıldığı seviye atlanmadan yeniden sorulur.
 // - Yanlışı olmayan konu, ulaştığı seviyeden başlar ve hızlı tırmanır.
 // - Yanlışı olmayan her konudan SHIFT soru, yanlışı en çok olan konulara aktarılır.
-export function previousFocus(prev) {
+export function previousFocus(prev, total = TOTAL) {
   const h = prev.history || [];
   const topics = {};
   const wrongs = {};
@@ -297,7 +312,8 @@ export function previousFocus(prev) {
     }
   }
 
-  const plan = PLAN.map((b) => ({ ...b }));
+  const base = planFor(total);
+  const plan = base.map((b) => ({ ...b }));
   let pool = 0;
   for (const b of plan) {
     if (wrongs[b.topic] === 0 && b.count - SHIFT >= MIN_BLOCK) {
@@ -307,7 +323,7 @@ export function previousFocus(prev) {
   }
   const receivers = plan.filter((b) => wrongs[b.topic] > 0).sort((a, b) => wrongs[b.topic] - wrongs[a.topic]);
   if (!receivers.length) {
-    plan.forEach((b, i) => (b.count = PLAN[i].count));
+    plan.forEach((b, i) => (b.count = base[i].count));
     pool = 0;
   }
   for (let i = 0; pool > 0; i++, pool--) receivers[i % receivers.length].count++;
@@ -316,8 +332,11 @@ export function previousFocus(prev) {
   return { plan, topics, weak };
 }
 
+// Soru sayısı seçilebilir olmadan önce başlamış oturumlar 50 sorudur.
+export const totalOf = (s) => s.total ?? TOTAL;
+
 export function isFinished(s) {
-  return s.history.length >= TOTAL;
+  return s.history.length >= totalOf(s);
 }
 
 // Konu-seviye bazında doğru/yanlış/süre.
@@ -460,14 +479,62 @@ function adapt(s, topic, correct, level) {
   }
 }
 
+// ---------------------------------------------------------------- power
+// Power 0–100 arası beceri puanıdır ve testten teste taşınır; Elo puanı gibi işler.
+// Her sorunun 0–100 arası bir zorluğu vardır (difficulty). Öğrencinin soruyu
+// bilme beklentisi E = 1 / (1 + 10^((zorluk − power) / POWER_SCALE)):
+// power zorluğa eşitse %50, zorluğun 20 üstündeyse %91.
+//   doğru:              power += POWER_K × (1 − E)
+//   yanlış, Bilmiyorum: power −= POWER_K × E
+// Zor soruyu bilmek çok, kolayı bilmek az kazandırır; kolay soruda yanılmak çok,
+// zorda yanılmak az kaybettirir. Puan, öğrencinin yarı yarıya bildiği zorluğa oturur.
+// Değişim tam sayıya yuvarlanır, en az 1 puandır.
+export const POWER_MAX = 100;
+export const POWER_K = 8;
+export const POWER_SCALE = 20;
+
+// Seviyenin zorluğu: sınıf başına 20 puanlık dilim (1. sınıf 0–20, 5. sınıf 80–100);
+// konunun aynı sınıftaki seviyeleri dilimi eşit aralıkla paylaşır.
+export function difficulty(topic, level) {
+  const levels = TOPICS[topic].levels;
+  const { grade } = levels[level - 1];
+  const same = levels.filter((l) => l.grade === grade);
+  const i = same.indexOf(levels[level - 1]);
+  return 20 * (grade - 1) + (20 * (i + 1)) / (same.length + 1);
+}
+
+export function powerExpect(power, d) {
+  return 1 / (1 + 10 ** ((d - power) / POWER_SCALE));
+}
+
+export function powerDelta(power, d, correct, k = POWER_K) {
+  const e = powerExpect(power, d);
+  const raw = correct ? k * (1 - e) : -k * e;
+  const step = Math.max(1, Math.round(Math.abs(raw))) * Math.sign(raw);
+  return Math.min(POWER_MAX, Math.max(0, power + step)) - power;
+}
+
+// Power kaydı yokken başlangıç: önceki test varsa onun genel sınıfının ortası
+// (3. sınıf → 50), yoksa 0.
+export function initialPower(results) {
+  if (!results || !results.length) return 0;
+  const g = buildReport(results[0]).overall.grade;
+  return g ? 20 * g - 10 : 0;
+}
+
 export function submit(s, answer, ms, now = Date.now()) {
   const q = s.current;
   if (!q) throw new Error('aktif soru yok');
   const res = check(q, answer);
+  if (s.power == null) s.power = s.powerStart = 0;
+  res.powerDelta = powerDelta(s.power, difficulty(q.topic, q.level), res.correct);
+  s.power += res.powerDelta;
+  res.power = s.power;
   s.history.push({
     n: q.n, topic: q.topic, level: q.level, a: q.a, b: q.b, op: q.op,
     answer, correct: res.correct, ms: Math.max(0, Math.round(ms)),
     pattern: res.correct ? null : classifyError(q, answer),
+    power: s.power,
   });
   adapt(s, q.topic, res.correct, q.level);
   s.inBlock++;
@@ -661,6 +728,8 @@ export function buildReport(s) {
 
   const totalMs = h.reduce((acc, x) => acc + x.ms, 0);
   return {
+    // Power'dan önceki sürümde biten testlerde power yok.
+    power: s.powerStart == null ? null : { start: s.powerStart, end: s.power },
     overall: {
       grade: minGrade,
       text: minGrade ? `${minGrade}. sınıf seviyesi` : '1. sınıf seviyesinin altında',
@@ -675,6 +744,8 @@ export function buildReport(s) {
   };
 }
 
+export const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '±0');
+
 export function gradeText(g) {
   return g ? `${g}. sınıf` : '1. sınıfın altında';
 }
@@ -685,6 +756,7 @@ export function reportText(rep, date) {
   lines.push(`Aritmetik seviye testi — ${date}`);
   lines.push(`Genel: ${rep.overall.text}${rep.overall.weakest.length ? ` (en zayıf: ${rep.overall.weakest.join(', ')})` : ''}`);
   lines.push(`${rep.correct}/${rep.total} doğru · toplam ${fmtDuration(rep.totalMs)} · soru başına ort. ${fmtDuration(rep.avgMs)}`);
+  if (rep.power) lines.push(`Power: ${rep.power.start} → ${rep.power.end} (${signed(rep.power.end - rep.power.start)})`);
   lines.push('');
   for (const t of rep.topics) {
     lines.push(`${t.name}: ${t.gradeLabel} — ${t.correct}/${t.total} doğru, ort. ${fmtDuration(t.ms / t.total)}`);
